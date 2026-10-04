@@ -1,0 +1,40 @@
+# ─── RoSTAM Default Configuration ──────────────────────────────────────────
+# Edit this file to change experiment parameters. Do NOT edit source code.
+
+experiment:
+  name: "ST-SR-TA_baseline"
+  output_dir: "./results"
+  problem_distribution: "ST-SR-TA"   # ST-SR-TA | ST-MR-TA | MT-SR-TA | MT-MR-TA
+
+environment:
+  num_robots: 3
+  num_tasks: 50
+  map_dim: 6                   # tasks placed in [-map_dim, map_dim] x [-map_dim, map_dim]
+  task_type: 1                 # 1=SR, 2=MR loosely coupled, 3=MR tightly coupled, 4=multi-task
+  speed_matrix: [1.0, 1.0, 1.0]
+  failed_robots: [1, 1, 1]    # 1=active, 0=failed at start
+  hidden_task_percentage: 0.0  # fraction of tasks hidden for dynamic arrival
+
+ea:
+  population_size: 100
+  num_generations: 1500
+  crossover_prob: 1.0
+  mutation_prob: 0.3
+  seed: null                   # set an integer for reproducible runs
+  ais_injection_freq: 10       # every N gens inject fresh random individuals
+  ais_inject_count: 20         # how many random individuals to inject
+
+window:
+  enabled: false               # rolling-horizon windowed execution
+  window_size: 3               # tasks dispatched per execution window
+
+penalty:
+  mode: "adaptive"             # fixed | dynamic | adaptive
+  initial_value: 1.0
+  adaptive_window: 10          # gens to look back for adaptive adjustment
+  adaptive_rate: 0.15          # fractional change per adjustment step
+  max_value: 20.0
+
+logging:
+  level: "INFO"
+  log_frequency: 100           # print stats every N generations
