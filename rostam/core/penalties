@@ -1,0 +1,125 @@
+"""
+Penalty Functions
+=================
+Constraint-violation penalties used to guide the EA away from infeasible
+solutions without hard-repairing them.
+
+Three modes are supported:
+  - fixed    : constant penalty coefficient throughout the run
+  - dynamic  : linearly increases with generation number
+  - adaptive : adjusts based on whether recent best solutions were feasible
+               (Michalewicz & Fogel 2004, Penalty Scheme 3.2.4)
+"""
+
+from __future__ import annotations
+
+from collections import deque
+from typing import Deque
+
+from .fitness import compute_penalty, is_infeasible
+
+
+class PenaltyController:
+    """
+    Manages the penalty value across EA generations.
+
+    Parameters
+    ----------
+    mode : str
+        One of 'fixed', 'dynamic', or 'adaptive'.
+    initial_value : float
+        Starting penalty coefficient.
+    adaptive_window : int
+        Number of recent generations to track for adaptive mode.
+    adaptive_rate : float
+        Fractional change applied when adjusting the penalty.
+    max_value : float
+        Upper bound on the penalty coefficient.
+    """
+
+    def __init__(
+        self,
+        mode: str = "adaptive",
+        initial_value: float = 1.0,
+        adaptive_window: int = 10,
+        adaptive_rate: float = 0.15,
+        max_value: float = 20.0,
+    ):
+        self.mode = mode
+        self.value = initial_value
+        self._initial_value = initial_value
+        self.adaptive_window = adaptive_window
+        self.adaptive_rate = adaptive_rate
+        self.max_value = max_value
+
+        # FIFO window: 1 = best was infeasible, 0 = best was feasible
+        self._recent: Deque[int] = deque(
+            [0] * adaptive_window, maxlen=adaptive_window
+        )
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def get_penalty(self, generation: int = 0) -> float:
+        """
+        Return the current penalty coefficient for use in fitness evaluation.
+
+        Parameters
+        ----------
+        generation : int
+            Current generation number (used for dynamic mode).
+
+        Returns
+        -------
+        float
+        """
+        if self.mode == "fixed":
+            return self._initial_value
+        elif self.mode == "dynamic":
+            # Linearly scales from initial_value up to max_value
+            return min(self._initial_value + generation * 0.01, self.max_value)
+        else:  # adaptive
+            return self.value
+
+    def update(self, best_individual, robot_num: int, generation: int) -> None:
+        """
+        Update the penalty controller based on whether the current best
+        individual is feasible.
+
+        Call once per generation, after selecting the best individual.
+
+        Parameters
+        ----------
+        best_individual : creator.Individual
+            The best individual in the current generation.
+        robot_num : int
+            Number of robots.
+        generation : int
+            Current generation index (used for periodic update).
+        """
+        if self.mode != "adaptive":
+            return
+
+        # Record feasibility of this generation's best
+        infeasible = is_infeasible(best_individual, robot_num)
+        self._recent.appendleft(1 if infeasible else 0)
+
+        # Only adjust every adaptive_window generations
+        if generation % self.adaptive_window != 0:
+            return
+
+        all_infeasible = all(v == 1 for v in self._recent)
+        all_feasible = all(v == 0 for v in self._recent)
+
+        if all_infeasible and self.value < self.max_value:
+            # Push towards feasibility — increase penalty
+            self.value = min(self.value * (1 + self.adaptive_rate), self.max_value)
+        elif all_feasible:
+            # Relax penalty — allow exploration of infeasible regions
+            self.value = max(self.value * (1 - self.adaptive_rate), 1e-3)
+
+    def reset(self) -> None:
+        """Reset penalty to initial state (useful between windowed runs)."""
+        self.value = self._initial_value
+        self._recent = deque([0] * self.adaptive_window, maxlen=self.adaptive_window)
