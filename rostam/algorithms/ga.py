@@ -86,8 +86,8 @@ class RoSTAMGA:
         cfg = self.cfg
         num_tasks = len(self.sub_ids)
         pop_size = cfg.ea.population_size
-
-       def score_all(population: List[Individual], penalty: float) -> None:
+        
+        def score_all(population: List[Individual], penalty: float) -> None:
             for ind in population:
                 fit.evaluate(ind, self.dist_matrix, self.start_matrix,
                      self.robot_num, self.speed_matrix, penalty,
