@@ -91,6 +91,11 @@ def main(args=None) -> None:
 
     ga = RoSTAMGA(cfg, env)
     result = ga.run()
+    sub_ids = ga.sub_ids  # index → dot-notation mapping
+    named_tours = [
+    [sub_ids[idx] for idx in tour]
+    for tour in result.robot_tours
+]
 
     # ── Save results ──────────────────────────────────────────────────
     out_dir = Path(cfg.experiment.output_dir) / cfg.experiment.name
