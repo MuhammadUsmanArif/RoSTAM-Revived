@@ -181,7 +181,7 @@ class TaskEnvironment:
         self.sub_tasks.clear()
         for task in self.tasks.values():
             for slot_idx, cap in enumerate(task.requirements):
-                sub_id = f"{task.task_id},{slot_idx + 1}"
+                sub_id = f"{task.task_id}.{slot_idx + 1}"
                 self.sub_tasks[sub_id] = SubTask(
                     sub_id=sub_id,
                     parent_task_id=task.task_id,
