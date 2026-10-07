@@ -17,7 +17,7 @@ environment:
 
 ea:
   population_size: 100
-  num_generations: 1500
+  num_generations: 5000
   crossover_prob: 1.0
   mutation_prob: 0.3
   seed: null                   # set an integer for reproducible runs
