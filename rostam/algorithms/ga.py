@@ -27,7 +27,7 @@ logger = logging.getLogger("rostam.ga")
 @dataclass
 class GAResult:
     best_individual: Individual
-    best_fitness: float                 # true (unpenalised) makespan
+    best_fitness: float
     per_robot_costs: List[float]
     robot_tours: List[List[int]]
     generation_stats: List[Dict] = field(default_factory=list)
@@ -39,19 +39,41 @@ class RoSTAMGA:
     def __init__(self, cfg, env):
         self.cfg = cfg
         self.env = env
-        self.dist_matrix = np.asarray(env.dist_matrix, dtype=float)
-        self.start_matrix = np.asarray(env.start_matrix, dtype=float)
 
-        # Active robots come from the failed_robots mask in the config.
-        failed = list(getattr(cfg.environment, "failed_robots", []) or [])
-        if failed and len(failed) == self.start_matrix.shape[0]:
-            mask = np.asarray(failed, dtype=bool)
+        # ── Build a consistent integer index over sub-tasks ──────────────
+        # task.py stores dist_matrix as Dict[str, Dict[str, float]]
+        # and start_matrix as Dict[str, float].
+        # fitness.py needs numpy arrays: dist (n×n), start (robots×n).
+        self.sub_ids = sorted(env.sub_tasks.keys())
+        n = len(self.sub_ids)
+        sid_to_idx = {sid: i for i, sid in enumerate(self.sub_ids)}
+
+        # Convert nested dict → (n × n) numpy array
+        dist = np.zeros((n, n), dtype=float)
+        for a, row in env.dist_matrix.items():
+            ia = sid_to_idx[a]
+            for b, d in row.items():
+                dist[ia][sid_to_idx[b]] = d
+        self.dist_matrix = dist
+
+        # depot-to-task distances as 1D array (n,)
+        depot_dists = np.array(
+            [env.start_matrix[sid] for sid in self.sub_ids], dtype=float
+        )
+
+        # ── Active robots ────────────────────────────────────────────────
+        self.robot_num = int(getattr(cfg.environment, "robot_count", 3))
+
+        # All robots start at the same depot → replicate row robot_num times
+        # start_matrix shape: (robot_num, n)
+        self.start_matrix = np.tile(depot_dists, (self.robot_num, 1))
+
+        # Speed matrix (robot_num,)
+        speeds = getattr(cfg.environment, "speed_matrix", None)
+        if speeds is not None and len(speeds) >= self.robot_num:
+            self.speed_matrix = np.asarray(speeds[:self.robot_num], dtype=float)
         else:
-            mask = np.ones(self.start_matrix.shape[0], dtype=bool)
-        self.robot_num = int(mask.sum())
-        speeds = np.asarray(cfg.environment.speed_matrix, dtype=float)
-        self.speed_matrix = speeds[mask] if speeds.size == mask.size else speeds[: self.robot_num]
-        self.start_matrix = self.start_matrix[mask] if mask.size == np.asarray(env.start_matrix).shape[0] else self.start_matrix[: self.robot_num]
+            self.speed_matrix = np.ones(self.robot_num, dtype=float)
 
         self._penalty = make_penalty(cfg.penalty)
         self._stats: List[Dict] = []
@@ -61,7 +83,7 @@ class RoSTAMGA:
     def run(self) -> GAResult:
         start_time = time.time()
         cfg = self.cfg
-        num_tasks = self.dist_matrix.shape[0]
+        num_tasks = len(self.sub_ids)
         pop_size = cfg.ea.population_size
 
         def score_all(population: List[Individual], penalty: float) -> None:
@@ -69,27 +91,25 @@ class RoSTAMGA:
                 fit.evaluate(ind, self.dist_matrix, self.start_matrix,
                              self.robot_num, self.speed_matrix, penalty)
 
-        # ── 1. Initial population ─────────────────────────────────────
+        # ── 1. Initial population ────────────────────────────────────────
         pop = random_population(num_tasks, self.robot_num, pop_size, self._rng)
         score_all(pop, self._penalty.get_penalty(0))
 
         best_valid: Optional[Individual] = None
 
-        # ── 2. Generational loop ──────────────────────────────────────
+        # ── 2. Generational loop ─────────────────────────────────────────
         for gen in range(cfg.ea.num_generations):
             pop.sort(key=lambda ind: ind.fitness)
 
-            # AIS injection: refresh diversity every N generations
             if gen > 0 and cfg.ea.ais_injection_freq and gen % cfg.ea.ais_injection_freq == 0:
                 inject_random(pop, num_tasks, self.robot_num, cfg.ea.ais_inject_count, self._rng)
 
-            # Track the best *feasible* individual ever seen
             current_best_valid = self._get_best_valid(pop)
             if current_best_valid is not None:
                 if best_valid is None or current_best_valid.fitness < best_valid.fitness:
                     best_valid = current_best_valid.copy()
 
-            # ── Reproduction ─────────────────────────────────────────
+            # ── Reproduction ─────────────────────────────────────────────
             elite = pop[0].copy()
             children: List[Individual] = [elite]
             rng = self._rng
@@ -107,16 +127,16 @@ class RoSTAMGA:
                 children.extend([c1, c2])
             pop = children[:pop_size]
 
-            # ── Evaluation with current penalty, then penalty update ──
             score_all(pop, self._penalty.get_penalty(gen))
             gen_best = min(pop, key=lambda ind: ind.fitness)
             self._penalty.update(gen_best, self.robot_num, gen)
 
-            # ── Statistics ────────────────────────────────────────────
             fits = [ind.fitness for ind in pop]
-            stats = {"generation": gen,
-                     "min": float(np.min(fits)), "avg": float(np.mean(fits)),
-                     "max": float(np.max(fits)), "std": float(np.std(fits))}
+            stats = {
+                "generation": gen,
+                "min": float(np.min(fits)), "avg": float(np.mean(fits)),
+                "max": float(np.max(fits)), "std": float(np.std(fits)),
+            }
             self._stats.append(stats)
 
             if gen % cfg.logging.log_frequency == 0:
@@ -124,7 +144,7 @@ class RoSTAMGA:
                             gen, stats["min"], stats["avg"], stats["max"],
                             self._penalty.get_penalty(gen))
 
-        # ── 3. Package results (true makespan, not penalised score) ───
+        # ── 3. Package results ───────────────────────────────────────────
         runtime = time.time() - start_time
         best = best_valid if best_valid is not None else min(pop, key=lambda ind: ind.fitness)
 
