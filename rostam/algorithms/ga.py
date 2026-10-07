@@ -63,6 +63,7 @@ class RoSTAMGA:
 
         # ── Active robots ────────────────────────────────────────────────
         self.robot_num = int(getattr(cfg.environment, "robot_count", 3))
+        self.task_type = getattr(cfg.environment, "task_type", 1)
 
         # All robots start at the same depot → replicate row robot_num times
         # start_matrix shape: (robot_num, n)
