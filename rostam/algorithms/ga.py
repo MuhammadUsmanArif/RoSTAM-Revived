@@ -86,10 +86,12 @@ class RoSTAMGA:
         num_tasks = len(self.sub_ids)
         pop_size = cfg.ea.population_size
 
-        def score_all(population: List[Individual], penalty: float) -> None:
+       def score_all(population: List[Individual], penalty: float) -> None:
             for ind in population:
                 fit.evaluate(ind, self.dist_matrix, self.start_matrix,
-                             self.robot_num, self.speed_matrix, penalty)
+                     self.robot_num, self.speed_matrix, penalty,
+                     sub_ids=self.sub_ids,
+                     task_type=self.cfg.environment.task_type)
 
         # ── 1. Initial population ────────────────────────────────────────
         pop = random_population(num_tasks, self.robot_num, pop_size, self._rng)
