@@ -13,7 +13,7 @@ from typing import List
 class Individual:
     """A single candidate solution (task->robot assignment)."""
 
-    __slots__ = ("genes", "fitness", "feasible", "violations")
+    __slots__ = ("genes", "fitness", "makespan", "feasible", "violations")
 
     def __init__(self, genes: List[int]):
         self.genes: List[int] = list(genes)
