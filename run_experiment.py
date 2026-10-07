@@ -125,7 +125,7 @@ def main(args=None) -> None:
     print(f"  Runtime        : {result.runtime_seconds:.1f}s")
     print(f"  Per-robot costs: {[f'{c:.3f}' for c in result.per_robot_costs]}")
     print("-" * 60)
-    for i, tour in enumerate(result.robot_tours):
+    for i, tour in enumerate(named_tours):
         print(f"  Robot {i+1}: {tour}")
     print("=" * 60 + "\n")
 
