@@ -108,7 +108,7 @@ def main(args=None) -> None:
         "per_robot_costs": result.per_robot_costs,
         "feasible": result.feasible,
         "runtime_seconds": result.runtime_seconds,
-        "robot_tours": result.robot_tours,
+        "robot_tours": named_tours,   # was result.robot_tours
     }
 
     summary_path = out_dir / "summary.json"
